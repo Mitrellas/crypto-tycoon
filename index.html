@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Crypto Tycoon: Ultimate</title>
+    <style>
+        body { margin: 0; padding: 0; background: #0a0a0a; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Arial', sans-serif; }
+        canvas { border: 2px solid #00ff00; box-shadow: 0 0 30px rgba(0, 255, 0, 0.3); }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+    <script>
+        const W = 1024, H = 768;
+        
+        let coins = 0;
+        let coinsPerClick = 1;
+        let autoIncome = 0;
+        let multiplier = 1;
+        let prestigeMultiplier = 1;
+        
+        let coinText, clickText, autoText, prestigeText, seasonText;
+        let mainButton, buttonText;
+        let buyClickBtn, buyRigBtn, adBtn, achBtn, prestigeBtn, lbBtn, seasonBtn;
+        let buyClickText, buyRigText;
+        
+        let clickLevel = 1;
+        let clickCost = 50;
+        let rigLevel = 1;
+        let rigCost = 200;
+        let prestigeCost = 1000000;
+        
+        // Переменная для сундука
+        let chestAvailable = false;
+        let chestTimer = 0;
+        let chestObj = null;
+        
+        let achievementQueue = [];
+        let isShowingAchievement = false;
+
+        let isCrash = false;
+        let crashMultiplier = 1;
+        let investorEvent = null;
+        let isInvesting = false;
+
+        let playerName = localStorage.getItem('cryptoName') || '';
+        let fakeNames = ["CryptoKing", "Satoshi", "ElonMusk", "ToTheMoon", "HODLer", "Whale", "Degen", "PumpIt"];
+        let fakeScores = [5000000, 2000000, 1000000, 500000, 250000, 100000, 50000, 10000];
+
+        let lastBonusTime = parseInt(localStorage.getItem('cryptoLastBonus')) || 0;
+
+        // --- СЕЗОНЫ ---
+        let seasonScore = parseInt(localStorage.getItem('cryptoSeasonScore')) || 0;
+        let seasonClaimed = JSON.parse(localStorage.getItem('cryptoSeasonClaimed')) || [];
+        let seasonStartTime = parseInt(localStorage.getItem('cryptoSeasonStart')) || Date.now();
+        let seasonRewards = [
+            { level: 1, req: 1000, reward: '100 BTC', type: 'coins', val: 100 },
+            { level: 2, req: 5000, reward: 'x2 Доход на 5 мин', type: 'mult', val: 2 },
+            { level: 3, req: 10000, reward: '500 BTC', type: 'coins', val: 500 },
+            { level: 4, req: 25000, reward: 'Бесплатный кейс', type: 'case', val: 0 },
+            { level: 5, req: 50000, reward: 'x3 Доход на 10 мин', type: 'mult', val: 3 },
+            { level: 6, req: 100000, reward: '1000 BTC', type: 'coins', val: 1000 },
+            { level: 7, req: 250000, reward: '5000 BTC', type: 'coins', val: 5000 },
+            { level: 8, req: 500000, reward: 'x5 Доход на 15 мин', type: 'mult', val: 5 },
+            { level: 9, req: 1000000, reward: '20000 BTC', type: 'coins', val: 20000 },
+            { level: 10, req: 5000000, reward: 'ДЖЕКПОТ 100 000 BTC', type: 'coins', val: 100000 }
+        ];
+
+        let now = Date.now();
+        if (now - seasonStartTime > 7 * 24 * 60 * 60 * 1000) {
+            seasonScore = 0;
+            seasonClaimed = [];
+            seasonStartTime = now;
+            localStorage.setItem('cryptoSeasonScore', 0);
+            localStorage.setItem('cryptoSeasonClaimed', JSON.stringify([]));
+            localStorage.setItem('cryptoSeasonStart', now);
+        }
+
+        let achievementsList = [
+            { id: 'a1', title: 'Пацан с района', desc: 'Сделайте первый клик', type: 'coins', target: 1, reward: 10, unlocked: false },
+            { id: 'a2', title: 'Первая сотня', desc: 'Накопите 100 BTC', type: 'coins', target: 100, reward: 20, unlocked: false },
+            { id: 'a3', title: 'Мелкий инвестор', desc: 'Купите 1 ферму', type: 'autoLvl', target: 5, reward: 50, unlocked: false },
+            { id: 'a4', title: 'Тысячник', desc: 'Накопите 1 000 BTC', type: 'coins', target: 1000, reward: 100, unlocked: false },
+            { id: 'a5', title: 'Бизнесмен', desc: 'Улучшите клик 5 раз', type: 'clickLvl', target: 5, reward: 200, unlocked: false },
+            { id: 'a6', title: 'Фермер', desc: 'Купите 5 ферм', type: 'autoLvl', target: 25, reward: 300, unlocked: false },
+            { id: 'a7', title: 'Десяточка', desc: 'Накопите 10 000 BTC', type: 'coins', target: 10000, reward: 500, unlocked: false },
+            { id: 'a8', title: 'Трейдер', desc: 'Доведите клик до 20 BTC', type: 'clickLvl', target: 20, reward: 800, unlocked: false },
+            { id: 'a9', title: 'Заводчик', desc: 'Купите 10 ферм', type: 'autoLvl', target: 50, reward: 1000, unlocked: false },
+            { id: 'a10', title: 'Сотня тысяч', desc: 'Накопите 100 000 BTC', type: 'coins', target: 100000, reward: 2000, unlocked: false },
+            { id: 'a11', title: 'Крипто-Кит', desc: 'Накопите 1 000 000 BTC', type: 'coins', target: 1000000, reward: 5000, unlocked: false },
+            { id: 'a12', title: 'Магнат', desc: 'Купите 25 ферм', type: 'autoLvl', target: 125, reward: 8000, unlocked: false },
+            { id: 'a13', title: 'Апгрейд-мастер', desc: 'Улучшите клик 20 раз', type: 'clickLvl', target: 20, reward: 10000, unlocked: false },
+            { id: 'a14', title: 'Миллионер', desc: 'Накопите 10 000 000 BTC', type: 'coins', target: 10000000, reward: 20000, unlocked: false },
+            { id: 'a15', title: 'Ферма-гигант', desc: 'Купите 50 ферм', type: 'autoLvl', target: 250, reward: 30000, unlocked: false },
+            { id: 'a16', title: 'Император Трейдинга', desc: 'Доведите клик до 100 BTC', type: 'clickLvl', target: 100, reward: 50000, unlocked: false },
+            { id: 'a17', title: 'Крипто-Барон', desc: 'Накопите 100 000 000 BTC', type: 'coins', target: 100000000, reward: 100000, unlocked: false },
+            { id: 'a18', title: 'Синдикат', desc: 'Купите 100 ферм', type: 'autoLvl', target: 500, reward: 200000, unlocked: false },
+            { id: 'a19', title: 'Создатель', desc: 'Накопите 1 000 000 000 BTC', type: 'coins', target: 1000000000, reward: 500000, unlocked: false },
+            { id: 'a20', title: 'БОГ КРИПТЫ', desc: 'Доведите клик до 1000 BTC', type: 'clickLvl', target: 1000, reward: 1000000, unlocked: false }
+        ];
+        
+        let savedAch = localStorage.getItem('cryptoAchievementsUltimate');
+        if (savedAch) {
+            let parsed = JSON.parse(savedAch);
+            achievementsList.forEach(a => { if (parsed.includes(a.id)) a.unlocked = true; });
+        }
+
+        let buildings = [];
+        let cityGraphics;
+        let bgCars = [];
+        let hackerEvent = null;
+
+        const config = {
+            type: Phaser.AUTO,
+            width: W, height: H,
+            backgroundColor: '#050505',
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        function preload() {
+            this.load.audio('click', 'https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+            this.load.audio('buy', 'https://actions.google.com/sounds/v1/cartoon/magic_wand.ogg');
+            this.load.audio('error', 'https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg');
+        }
+
+        function create() {
+            if (!playerName) {
+                let namePrompt = this.add.container(0, 0).setDepth(200);
+                let bg = this.add.rectangle(W/2, H/2, W, H, 0x000000, 1);
+                let title = this.add.text(W/2, H/2 - 100, 'ВВЕДИТЕ ВАШ НИКНЕЙМ', { font: 'bold 40px Arial', fill: '#00ff00' }).setOrigin(0.5);
+                let inputBox = this.add.rectangle(W/2, H/2, 400, 60, 0x222222).setStrokeStyle(3, 0x00ff00);
+                let nameText = this.add.text(W/2, H/2, '', { font: '30px Arial', fill: '#ffffff' }).setOrigin(0.5);
+                let startBtn = this.add.text(W/2, H/2 + 100, 'НАЧАТЬ', { font: 'bold 30px Arial', fill: '#000', backgroundColor: '#00ff00', padding: { x: 30, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+                namePrompt.add([bg, title, inputBox, nameText, startBtn]);
+
+                this.input.keyboard.on('keydown', (event) => {
+                    if (namePrompt.active) {
+                        if (event.key === 'Backspace') {
+                            playerName = playerName.slice(0, -1);
+                        } else if (event.key === 'Enter') {
+                            if (playerName.length > 0) { startGame(); }
+                        } else if (event.key.length === 1 && playerName.length < 12) {
+                            playerName += event.key;
+                        }
+                        nameText.setText(playerName);
+                    }
+                });
+
+                startBtn.on('pointerdown', () => {
+                    if (playerName.length > 0) { startGame(); }
+                });
+
+                startGame = () => {
+                    localStorage.setItem('cryptoName', playerName);
+                    namePrompt.destroy();
+                    buildGame(this);
+                };
+            } else {
+                buildGame(this);
+            }
+        }
+
+        function buildGame(scene) {
+            let skyGraphics = scene.add.graphics();
+            skyGraphics.fillGradientStyle(0x0a0a1a, 0x0a0a1a, 0x2a0a4a, 0x2a0a4a, 1);
+            skyGraphics.fillRect(0, 0, W, H);
+
+            scene.add.circle(W - 150, 150, 60, 0xffffaa, 0.8);
+            scene.add.circle(W - 130, 130, 50, 0x0a0a1a, 1);
+
+            cityGraphics = scene.add.graphics();
+
+            let roadGraphics = scene.add.graphics();
+            roadGraphics.fillStyle(0x0a0a0a, 1);
+            roadGraphics.fillRect(0, H - 60, W, 60);
+            roadGraphics.lineStyle(2, 0x00ff00, 0.5);
+            for (let x = 0; x < W; x += 80) { roadGraphics.lineBetween(x, H - 30, x + 40, H - 30); }
+
+            for (let i = 0; i < 20; i++) {
+                let car = scene.add.circle(Phaser.Math.Between(-W, W), Phaser.Math.Between(100, H - 150), 3, Math.random() > 0.5 ? 0xff0000 : 0x00ffff);
+                car.speed = Phaser.Math.Between(50, 150);
+                car.direction = Math.random() > 0.5 ? 1 : -1;
+                bgCars.push(car);
+            }
+
+            scene.add.text(20, 20, 'Игрок: ' + playerName, { font: 'bold 20px Arial', fill: '#ffd700' });
+
+            coinText = scene.add.text(W/2, 40, 'BTC: ' + Math.floor(coins), { font: 'bold 60px Arial', fill: '#00ff00', stroke: '#003300', strokeThickness: 8 }).setOrigin(0.5);
+            clickText = scene.add.text(W/2, 110, 'За клик: ' + coinsPerClick, { font: '28px Arial', fill: '#ffffff' }).setOrigin(0.5);
+            autoText = scene.add.text(W/2, 150, 'Ферма: ' + autoIncome + ' / сек', { font: '28px Arial', fill: '#00ffff' }).setOrigin(0.5);
+            
+            prestigeText = scene.add.text(W/2, 190, 'ДОСТУПНО ПЕРЕРОЖДЕНИЕ!', { font: 'bold 30px Arial', fill: '#ff00ff' }).setOrigin(0.5).setVisible(false);
+            
+            seasonText = scene.add.text(W/2, 195, 'Сезон: ' + seasonScore + ' очков', { font: 'bold 20px Arial', fill: '#ffd700' }).setOrigin(0.5);
+
+            let glow = scene.add.circle(W/2, H/2, 200, 0x00ff00, 0.2);
+            scene.tweens.add({ targets: glow, scale: 1.2, alpha: 0.5, duration: 1000, yoyo: true, repeat: -1 });
+            
+            let coinGraphics = scene.add.graphics();
+            coinGraphics.fillStyle(0xffd700, 1);
+            coinGraphics.fillCircle(0, 0, 160);
+            coinGraphics.lineStyle(10, 0x8b4513, 1);
+            coinGraphics.strokeCircle(0, 0, 160);
+            coinGraphics.fillStyle(0xffa500, 1);
+            coinGraphics.fillEllipse(-50, -50, 100, 50);
+
+            mainButton = scene.add.container(W/2, H/2, [coinGraphics]);
+            mainButton.setSize(320, 320);
+            mainButton.setInteractive({ useHandCursor: true });
+            
+            buttonText = scene.add.text(0, 0, '₿', { font: 'bold 180px Arial', fill: '#8b4513' }).setOrigin(0.5);
+            mainButton.add(buttonText);
+
+            scene.add.rectangle(W/4, H - 150, 260, 80, 0x222222).setStrokeStyle(3, 0x00ff00);
+            buyClickText = scene.add.text(W/4, H - 150, `💻 УЛУЧШИТЬ КЛИК (Ур. ${clickLevel})\nЦена: ${clickCost} BTC`, { font: 'bold 18px Arial', fill: '#00ff00', align: 'center' }).setOrigin(0.5);
+            buyClickBtn = scene.add.zone(W/4, H - 150, 260, 80).setInteractive({ useHandCursor: true });
+
+            buyClickBtn.on('pointerdown', () => {
+                if (coins >= clickCost) {
+                    coins -= clickCost;
+                    coinsPerClick += 2;
+                    clickLevel++;
+                    clickCost = Math.floor(clickCost * 1.8);
+                    buyClickText.setText(`💻 УЛУЧШИТЬ КЛИК (Ур. ${clickLevel})\nЦена: ${clickCost} BTC`);
+                    updateUI();
+                    scene.cameras.main.flash(100, 0, 255, 0);
+                    try { scene.sound.play('buy'); } catch(e) {}
+                    checkAchievements(scene);
+                    updateCity(scene);
+                } else { scene.cameras.main.shake(100, 0.01); try { scene.sound.play('error'); } catch(e) {} }
+            });
+
+            scene.add.rectangle(W * 0.75, H - 150, 260, 80, 0x222222).setStrokeStyle(3, 0x00ffff);
+            buyRigText = scene.add.text(W * 0.75, H - 150, `🏭 КУПИТЬ ФЕРМУ (Ур. ${rigLevel})\nЦена: ${rigCost} BTC`, { font: 'bold 18px Arial', fill: '#00ffff', align: 'center' }).setOrigin(0.5);
+            buyRigBtn = scene.add.zone(W * 0.75, H - 150, 260, 80).setInteractive({ useHandCursor: true });
+
+            buyRigBtn.on('pointerdown', () => {
+                if (coins >= rigCost) {
+                    coins -= rigCost;
+                    autoIncome += 5;
+                    rigLevel++;
+                    rigCost = Math.floor(rigCost * 1.8);
+                    buyRigText.setText(`🏭 КУПИТЬ ФЕРМУ (Ур. ${rigLevel})\nЦена: ${rigCost} BTC`);
+                    updateUI();
+                    scene.cameras.main.flash(100, 0, 255, 255);
+                    try { scene.sound.play('buy'); } catch(e) {}
+                    checkAchievements(scene);
+                    updateCity(scene);
+                } else { scene.cameras.main.shake(100, 0.01); try { scene.sound.play('error'); } catch(e) {} }
+            });
+
+            scene.add.rectangle(W/4, H - 50, 260, 80, 0x222222).setStrokeStyle(3, 0xd32f2f);
+            scene.add.text(W/4, H - 50, '🎬 РЕКЛАМА\nx5 доход', { font: 'bold 20px Arial', fill: '#d32f2f', align: 'center' }).setOrigin(0.5);
+            adBtn = scene.add.zone(W/4, H - 50, 260, 80).setInteractive({ useHandCursor: true });
+            adBtn.on('pointerdown', () => {
+                if (window.ysdk) { window.ysdk.adv.showRewardedVideo({ callbacks: { onRewarded: () => activateAdBoost(scene) } }); }
+                else { activateAdBoost(scene); }
+            });
+
+            scene.add.rectangle(W * 0.75, H - 50, 260, 80, 0x222222).setStrokeStyle(3, 0xff9800);
+            scene.add.text(W * 0.75, H - 50, '🏆 ДОСТИЖЕНИЯ\n20 штук', { font: 'bold 20px Arial', fill: '#ff9800', align: 'center' }).setOrigin(0.5);
+            achBtn = scene.add.zone(W * 0.75, H - 50, 260, 80).setInteractive({ useHandCursor: true });
+            achBtn.on('pointerdown', () => { showAchievementsWindow(scene); });
+
+            // Кнопка Лидерборда (в правом верхнем углу)
+            scene.add.rectangle(W - 100, 50, 150, 50, 0x222222).setStrokeStyle(3, 0xffd700);
+            scene.add.text(W - 100, 50, '🏆 ТОП', { font: 'bold 20px Arial', fill: '#ffd700', align: 'center' }).setOrigin(0.5);
+            lbBtn = scene.add.zone(W - 100, 50, 150, 50).setInteractive({ useHandCursor: true });
+            lbBtn.on('pointerdown', () => { showLeaderboard(scene); });
+
+            // Кнопка Сезона (теперь четко под ником в левом верхнем углу)
+            scene.add.rectangle(100, 80, 140, 50, 0x222222).setStrokeStyle(3, 0xff00ff);
+            scene.add.text(100, 80, '🎁 СЕЗОН', { font: 'bold 18px Arial', fill: '#ff00ff', align: 'center' }).setOrigin(0.5);
+            seasonBtn = scene.add.zone(100, 80, 140, 50).setInteractive({ useHandCursor: true });
+            seasonBtn.on('pointerdown', () => { showSeasonWindow(scene); });
+
+            prestigeBtn = scene.add.text(W/2, H/2 + 250, 'ПЕРЕРОЖДЕНИЕ (СБРОС)', { 
+                font: 'bold 24px Arial', fill: '#fff', backgroundColor: '#ff00ff', padding: { x: 20, y: 10 } 
+            }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setVisible(false);
+
+            prestigeBtn.on('pointerdown', () => {
+                if (coins >= prestigeCost) {
+                    prestigeMultiplier += 1;
+                    coins = 0;
+                    coinsPerClick = 1;
+                    autoIncome = 0;
+                    clickLevel = 1;
+                    rigLevel = 1;
+                    clickCost = 50;
+                    rigCost = 200;
+                    buyClickText.setText(`💻 УЛУЧШИТЬ КЛИК (Ур. 1)\nЦена: 50 BTC`);
+                    buyRigText.setText(`🏭 КУПИТЬ ФЕРМУ (Ур. 1)\nЦена: 200 BTC`);
+                    updateUI();
+                    updateCity(scene);
+                    scene.cameras.main.flash(500, 255, 0, 255);
+                    prestigeBtn.setVisible(false);
+                    prestigeText.setVisible(false);
+                    alert('ПЕРЕРОЖДЕНИЕ УСПЕШНО! Ваш доход увеличен навсегда.');
+                }
+            });
+
+            mainButton.on('pointerdown', () => {
+                coins += Math.floor(coinsPerClick * multiplier * prestigeMultiplier);
+                seasonScore += Math.floor(coinsPerClick * multiplier * prestigeMultiplier); 
+                localStorage.setItem('cryptoSeasonScore', seasonScore);
+                updateUI();
+                checkAchievements(scene);
+                scene.tweens.add({ targets: mainButton, scale: 0.9, duration: 50, yoyo: true });
+                try { scene.sound.play('click', { volume: 0.3 }); } catch(e) {}
+                
+                let floatText = scene.add.text(W/2 + Phaser.Math.Between(-100, 100), H/2 + Phaser.Math.Between(-100, 100), '+₿' + Math.floor(coinsPerClick * multiplier * prestigeMultiplier), { 
+                    font: 'bold 40px Arial', fill: multiplier > 1 ? '#ffeb3b' : '#ffd700', stroke: '#000', strokeThickness: 5 
+                }).setOrigin(0.5);
+                scene.tweens.add({ targets: floatText, y: floatText.y - 100, alpha: 0, duration: 800, onComplete: () => floatText.destroy() });
+            });
+
+            scene.time.addEvent({
+                delay: 1000,
+                callback: () => {
+                    if (autoIncome > 0) { 
+                        let earned = Math.floor(autoIncome * multiplier * prestigeMultiplier * crashMultiplier);
+                        coins += earned; 
+                        seasonScore += earned; 
+                        localStorage.setItem('cryptoSeasonScore', seasonScore);
+                        updateUI(); 
+                        checkAchievements(scene); 
+                    }
+                },
+                loop: true
+            });
+
+            scene.time.addEvent({
+                delay: Phaser.Math.Between(15000, 30000),
+                callback: () => {
+                    if (!hackerEvent) { spawnHacker(scene); }
+                },
+                loop: true
+            });
+
+            scene.time.addEvent({
+                delay: 40000,
+                callback: () => { triggerMarketCrash(scene); },
+                loop: true
+            });
+
+            scene.time.addEvent({
+                delay: 25000,
+                callback: () => { spawnInvestor(scene); },
+                loop: true
+            });
+
+            checkDailyBonus(scene);
+            updateCity(scene);
+        }
+
+        // --- ОКНО СЕЗОНОВ ---
+        function showSeasonWindow(scene) {
+            let container = scene.add.container(0, 0).setDepth(100);
+            let bg = scene.add.rectangle(W/2, H/2, W, H, 0x000000, 0.95);
+            container.add(bg);
+            let title = scene.add.text(W/2, 40, 'СЕЗОННЫЙ ПРОПУСК', { font: 'bold 50px Arial', fill: '#ffd700' }).setOrigin(0.5);
+            container.add(title);
+            
+            let subTitle = scene.add.text(W/2, 90, 'Сезон заканчивается через: ' + Math.ceil((7 * 24 * 60 * 60 * 1000 - (Date.now() - seasonStartTime)) / (1000 * 60 * 60 * 24)) + ' дней', { font: '20px Arial', fill: '#aaaaaa' }).setOrigin(0.5);
+            container.add(subTitle);
+
+            let startX = 100;
+            let startY = 150;
+            let rowHeight = 50;
+
+            seasonRewards.forEach((reward, index) => {
+                let unlocked = seasonScore >= reward.req;
+                let claimed = seasonClaimed.includes(index);
+                
+                let color = claimed ? '#555555' : (unlocked ? '#00ff00' : '#ffffff');
+                let status = claimed ? '✅ Получено' : (unlocked ? '🎁 ЗАБРАТЬ' : `Нужно ${reward.req} очков`);
+                
+                let levelText = scene.add.text(startX, startY + index * rowHeight, `Уровень ${reward.level}`, { font: 'bold 22px Arial', fill: '#ffd700' });
+                let rewardText = scene.add.text(startX + 200, startY + index * rowHeight, reward.reward, { font: '20px Arial', fill: color });
+                let statusText = scene.add.text(W - 100, startY + index * rowHeight, status, { font: 'bold 20px Arial', fill: color }).setOrigin(1, 0);
+                
+                container.add([levelText, rewardText, statusText]);
+
+                if (unlocked && !claimed) {
+                    statusText.setInteractive({ useHandCursor: true });
+                    statusText.on('pointerdown', () => {
+                        if (reward.type === 'coins') { coins += reward.val; }
+                        else if (reward.type === 'mult') { multiplier = reward.val; scene.time.delayedCall(300000, () => { multiplier = 1; }); } 
+                        else if (reward.type === 'case') { openCase(scene); }
+
+                        seasonClaimed.push(index);
+                        localStorage.setItem('cryptoSeasonClaimed', JSON.stringify(seasonClaimed));
+                        
+                        statusText.setText('✅ Получено');
+                        statusText.setColor('#555555');
+                        statusText.disableInteractive();
+                        updateUI();
+                        scene.cameras.main.flash(200, 0, 255, 0);
+                    });
+                }
+            });
+
+            let closeBtn = scene.add.text(W/2, H - 50, 'ЗАКРЫТЬ', { font: 'bold 30px Arial', fill: '#000', backgroundColor: '#00ff00', padding: { x: 30, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            container.add(closeBtn);
+            closeBtn.on('pointerdown', () => { container.destroy(); });
+        }
+
+        // --- БИРЖЕВОЙ КРАШ ---
+        function triggerMarketCrash(scene) {
+            if (isCrash) return;
+            isCrash = true;
+            crashMultiplier = 0.2; 
+            
+            let warningBg = scene.add.rectangle(W/2, H/2 - 150, 600, 100, 0xff0000).setAlpha(0.8).setDepth(50);
+            let warningText = scene.add.text(W/2, H/2 - 150, '⚠️ РЫНОК ПАДАЕТ! ДОХОД СНИЖЕН!', { font: 'bold 30px Arial', fill: '#ffffff' }).setOrigin(0.5).setDepth(51);
+            
+            let saveBtn = scene.add.text(W/2, H/2 - 50, 'СПАСТИ (Смотреть Рекламу)', { 
+                font: 'bold 24px Arial', fill: '#000', backgroundColor: '#ffff00', padding: { x: 20, y: 10 } 
+            }).setOrigin(0.5).setDepth(51).setInteractive({ useHandCursor: true });
+
+            saveBtn.on('pointerdown', () => {
+                if (window.ysdk) {
+                    window.ysdk.adv.showRewardedVideo({ callbacks: { onRewarded: () => { stopCrash(scene); } } });
+                } else {
+                    stopCrash(scene);
+                }
+                warningBg.destroy();
+                warningText.destroy();
+                saveBtn.destroy();
+            });
+
+            scene.time.delayedCall(10000, () => {
+                if (isCrash) {
+                    warningBg.destroy();
+                    warningText.destroy();
+                    if (saveBtn.active) saveBtn.destroy();
+                    crashMultiplier = 1;
+                    isCrash = false;
+                }
+            });
+        }
+
+        function stopCrash(scene) {
+            crashMultiplier = 1;
+            isCrash = false;
+            scene.cameras.main.flash(200, 0, 255, 0);
+            let text = scene.add.text(W/2, H/2 - 150, 'РЫНОК СТАБИЛИЗИРОВАН!', { font: 'bold 40px Arial', fill: '#00ff00', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
+            scene.tweens.add({ targets: text, alpha: 0, duration: 2000, onComplete: () => text.destroy() });
+        }
+
+        // --- ИНВЕСТОР ---
+        function spawnInvestor(scene) {
+            if (isInvesting) return;
+            isInvesting = true;
+
+            let x = Phaser.Math.Between(200, W - 200);
+            let y = Phaser.Math.Between(200, H - 250);
+
+            investorEvent = scene.add.circle(x, y, 40, 0xffaa00).setStrokeStyle(4, 0xffffff).setDepth(50);
+            investorEvent.setInteractive({ useHandCursor: true });
+            
+            let label = scene.add.text(x, y - 60, 'ИНВЕСТОР', { font: 'bold 16px Arial', fill: '#ffaa00', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50);
+            
+            scene.tweens.add({ targets: investorEvent, scale: 1.2, alpha: 0.8, duration: 500, yoyo: true, repeat: -1 });
+
+            let timeout = scene.time.delayedCall(8000, () => {
+                if (investorEvent) {
+                    investorEvent.destroy();
+                    label.destroy();
+                    isInvesting = false;
+                }
+            });
+
+            investorEvent.on('pointerdown', () => {
+                timeout.remove();
+                investorEvent.destroy();
+                label.destroy();
+
+                let investAmount = Math.max(1000, Math.floor(coins * 0.2));
+                
+                let container = scene.add.container(0, 0).setDepth(100);
+                let bg = scene.add.rectangle(W/2, H/2, 500, 300, 0x111111).setStrokeStyle(4, 0xffaa00);
+                let title = scene.add.text(W/2, H/2 - 80, 'ИНВЕСТИЦИОННОЕ ПРЕДЛОЖЕНИЕ', { font: 'bold 24px Arial', fill: '#ffaa00' }).setOrigin(0.5);
+                let desc = scene.add.text(W/2, H/2 - 20, `Вложи ${investAmount} BTC и получи x3 через 10 секунд.\nНо есть риск потерять всё!`, { font: '20px Arial', fill: '#ffffff', align: 'center' }).setOrigin(0.5);
+                
+                let acceptBtn = scene.add.text(W/2 - 100, H/2 + 80, 'ВЛОЖИТЬ', { font: 'bold 24px Arial', fill: '#000', backgroundColor: '#00ff00', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+                let declineBtn = scene.add.text(W/2 + 100, H/2 + 80, 'ОТКАЗАТЬСЯ', { font: 'bold 24px Arial', fill: '#fff', backgroundColor: '#ff0000', padding: { x: 20, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+                container.add([bg, title, desc, acceptBtn, declineBtn]);
+
+                acceptBtn.on('pointerdown', () => {
+                    if (coins >= investAmount) {
+                        coins -= investAmount;
+                        updateUI();
+                        container.destroy();
+                        
+                        let waitText = scene.add.text(W/2, 200, 'ИНВЕСТИЦИЯ В РАБОТЕ...', { font: 'bold 30px Arial', fill: '#ffaa00' }).setOrigin(0.5).setDepth(50);
+                        
+                        scene.time.delayedCall(10000, () => {
+                            waitText.destroy();
+                            if (Math.random() > 0.3) {
+                                let profit = investAmount * 3;
+                                coins += profit;
+                                updateUI();
+                                scene.cameras.main.flash(300, 0, 255, 0);
+                                alert(`ИНВЕСТИЦИЯ УСПЕШНА! Вы получили ${profit} BTC!`);
+                            } else {
+                                scene.cameras.main.shake(300, 0.05);
+                                alert(`ИНВЕСТИЦИЯ ПРОВАЛИЛАСЬ! Вы потеряли ${investAmount} BTC.`);
+                            }
+                        });
+                    } else {
+                        scene.cameras.main.shake(100, 0.01);
+                        alert('Недостаточно средств!');
+                    }
+                    isInvesting = false;
+                });
+
+                declineBtn.on('pointerdown', () => {
+                    container.destroy();
+                    isInvesting = false;
+                });
+            });
+        }
+
+        // --- РЕАЛЬНАЯ ТАБЛИЦА ЛИДЕРОВ (ЧЕРЕЗ YANDEX SDK) ---
+        function showLeaderboard(scene) {
+            let container = scene.add.container(0, 0).setDepth(100);
+            let bg = scene.add.rectangle(W/2, H/2, W, H, 0x000000, 0.95);
+            let title = scene.add.text(W/2, 60, 'ТАБЛИЦА ЛИДЕРОВ (ТОП-10)', { font: 'bold 50px Arial', fill: '#ffd700' }).setOrigin(0.5);
+            let loadingText = scene.add.text(W/2, H/2, 'Загрузка...', { font: 'bold 30px Arial', fill: '#00ff00' }).setOrigin(0.5);
+            
+            container.add([bg, title, loadingText]);
+
+            let closeBtn = scene.add.text(W/2, H - 50, 'ЗАКРЫТЬ', { font: 'bold 30px Arial', fill: '#000', backgroundColor: '#00ff00', padding: { x: 30, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            container.add(closeBtn);
+            closeBtn.on('pointerdown', () => { container.destroy(); });
+
+            if (window.ysdk) {
+                window.ysdk.getLeaderboards().then(lb => {
+                    lb.getLeaderboardEntries('crypto_score', { quantityTop: 10, includeUser: true, quantityAround: 3 })
+                    .then(res => {
+                        loadingText.destroy();
+                        let entries = res.entries;
+                        let yPos = 150;
+
+                        entries.forEach((entry, index) => {
+                            let isPlayer = entry.player.publicName === playerName;
+                            let color = isPlayer ? '#00ff00' : '#ffffff';
+                            
+                            let rankText = scene.add.text(100, yPos, `#${index + 1}`, { font: 'bold 30px Arial', fill: color });
+                            let nameText = scene.add.text(200, yPos, entry.player.publicName || 'Аноним', { font: 'bold 30px Arial', fill: color });
+                            let scoreText = scene.add.text(W - 100, yPos, entry.score + ' BTC', { font: 'bold 30px Arial', fill: color }).setOrigin(1, 0);
+                            
+                            container.add([rankText, nameText, scoreText]);
+                            yPos += 50;
+                        });
+                    })
+                    .catch(err => {
+                        loadingText.setText('Ошибка загрузки топа. Убедитесь, что лидерборд создан.');
+                        console.log(err);
+                    });
+                });
+            } else {
+                loadingText.destroy();
+                let yPos = 150;
+                let allPlayers = fakeNames.map((name, index) => ({ name: name, score: fakeScores[index] }));
+                allPlayers.push({ name: playerName, score: coins });
+                allPlayers.sort((a, b) => b.score - a.score);
+
+                allPlayers.forEach((p, index) => {
+                    let isPlayer = p.name === playerName;
+                    let color = isPlayer ? '#00ff00' : '#ffffff';
+                    
+                    let rankText = scene.add.text(100, yPos, `#${index + 1}`, { font: 'bold 30px Arial', fill: color });
+                    let nameText = scene.add.text(200, yPos, p.name, { font: 'bold 30px Arial', fill: color });
+                    let scoreText = scene.add.text(W - 100, yPos, p.score + ' BTC', { font: 'bold 30px Arial', fill: color }).setOrigin(1, 0);
+                    
+                    container.add([rankText, nameText, scoreText]);
+                    yPos += 50;
+                });
+            }
+        }
+
+        // --- РЕНДЕР ГОРОДА ---
+        function updateCity(scene) {
+            cityGraphics.clear();
+            let numBuildings = Math.min(15, Math.floor(rigLevel / 2) + 1);
+            
+            for (let i = 0; i < 15; i++) {
+                let bWidth = Phaser.Math.Between(80, 140);
+                let bHeight = Phaser.Math.Between(250, 500);
+                let x = i * 80 - 30;
+                let y = H - bHeight;
+                
+                if (i < numBuildings) {
+                    cityGraphics.fillStyle(0x1a1a2e, 1);
+                    cityGraphics.fillRect(x, y, bWidth, bHeight);
+
+                    cityGraphics.fillStyle(0x00ffff, 0.6);
+                    for (let row = 0; row < bHeight - 20; row += 25) {
+                        for (let col = 0; col < bWidth - 10; col += 20) {
+                            if (Math.random() > 0.3) {
+                                cityGraphics.fillRect(x + col + 5, y + row + 10, 8, 10);
+                            }
+                        }
+                    }
+                } else {
+                    cityGraphics.fillStyle(0x0a0a1a, 1);
+                    cityGraphics.fillRect(x, H - 100, bWidth, 100);
+                }
+            }
+        }
+
+        // --- ХАКЕР ---
+        function spawnHacker(scene) {
+            let x = Phaser.Math.Between(100, W - 100);
+            let y = Phaser.Math.Between(100, H - 200);
+            
+            hackerEvent = scene.add.circle(x, y, 30, 0xff0000).setStrokeStyle(4, 0xffffff).setDepth(50);
+            hackerEvent.setInteractive({ useHandCursor: true });
+            
+            scene.tweens.add({ targets: hackerEvent, scale: 1.2, alpha: 0.8, duration: 500, yoyo: true, repeat: -1 });
+            
+            hackerEvent.on('pointerdown', () => {
+                try { scene.sound.play('buy'); } catch(e) {}
+                scene.cameras.main.flash(200, 255, 0, 0);
+                hackerEvent.destroy();
+                hackerEvent = null;
+                
+                multiplier = 10;
+                let text = scene.add.text(W/2, 250, 'ХАКЕР ПОЙМАН! x10 ДОХОД!', { font: 'bold 40px Arial', fill: '#ff0000', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
+                scene.tweens.add({ targets: text, alpha: 0, duration: 3000, onComplete: () => text.destroy() });
+                
+                scene.time.delayedCall(10000, () => { multiplier = 1; updateUI(); });
+            });
+
+            scene.time.delayedCall(5000, () => {
+                if (hackerEvent) { hackerEvent.destroy(); hackerEvent = null; }
+            });
+        }
+
+        // --- ЕЖЕДНЕВНЫЙ БОНУС ---
+        function checkDailyBonus(scene) {
+            let now = Date.now();
+            let timeDiff = now - lastBonusTime;
+            let oneDay = 24 * 60 * 60 * 1000;
+            
+            if (timeDiff > oneDay || lastBonusTime === 0) {
+                let bonus = 1000 + (rigLevel * 100);
+                
+                scene.time.delayedCall(1000, () => {
+                    let container = scene.add.container(0, 0).setDepth(100);
+                    let bg = scene.add.rectangle(W/2, H/2, 400, 300, 0x111111).setStrokeStyle(4, 0x00ff00);
+                    let title = scene.add.text(W/2, H/2 - 80, 'ЕЖЕДНЕВНЫЙ БОНУС!', { font: 'bold 30px Arial', fill: '#00ff00' }).setOrigin(0.5);
+                    let amountText = scene.add.text(W/2, H/2, '+' + bonus + ' BTC', { font: 'bold 40px Arial', fill: '#ffd700' }).setOrigin(0.5);
+                    let claimBtn = scene.add.text(W/2, H/2 + 80, 'ЗАБРАТЬ', { font: 'bold 24px Arial', fill: '#000', backgroundColor: '#00ff00', padding: { x: 30, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+                    
+                    container.add([bg, title, amountText, claimBtn]);
+
+                    claimBtn.on('pointerdown', () => {
+                        coins += bonus;
+                        updateUI();
+                        localStorage.setItem('cryptoLastBonus', Date.now());
+                        container.destroy();
+                    });
+                });
+            }
+        }
+
+        // --- ФУНКЦИИ КЕЙСОВ УДАЛЕНЫ ---
+
+        function checkAchievements(scene) {
+            achievementsList.forEach(ach => {
+                if (ach.unlocked) return;
+                let conditionMet = false;
+                if (ach.type === 'coins' && coins >= ach.target) conditionMet = true;
+                if (ach.type === 'clickLvl' && coinsPerClick >= ach.target) conditionMet = true;
+                if (ach.type === 'autoLvl' && autoIncome >= ach.target) conditionMet = true;
+
+                if (conditionMet) {
+                    ach.unlocked = true;
+                    coins += ach.reward;
+                    updateUI();
+                    achievementQueue.push({ title: ach.title, reward: ach.reward });
+                    saveAchievements();
+                }
+            });
+
+            if (!isShowingAchievement && achievementQueue.length > 0) { showNextAchievement(scene); }
+        }
+
+        function showNextAchievement(scene) {
+            if (achievementQueue.length === 0) { isShowingAchievement = false; return; }
+            isShowingAchievement = true;
+            let ach = achievementQueue.shift();
+            let text = scene.add.text(W/2, 200, '🏆 ' + ach.title + ' (+' + ach.reward + ' BTC)', { 
+                font: 'bold 24px Arial', fill: '#ffd700', stroke: '#000', strokeThickness: 4 
+            }).setOrigin(0.5).setDepth(40).setAlpha(0);
+
+            scene.tweens.add({
+                targets: text, alpha: 1, y: 150, duration: 500,
+                onComplete: () => {
+                    scene.time.delayedCall(1000, () => {
+                        scene.tweens.add({
+                            targets: text, alpha: 0, y: 100, duration: 500,
+                            onComplete: () => { text.destroy(); showNextAchievement(scene); }
+                        });
+                    });
+                }
+            });
+        }
+
+        function saveAchievements() {
+            let unlockedIds = achievementsList.filter(a => a.unlocked).map(a => a.id);
+            localStorage.setItem('cryptoAchievementsUltimate', JSON.stringify(unlockedIds));
+        }
+
+        function showAchievementsWindow(scene) {
+            let container = scene.add.container(0, 0).setDepth(100);
+            let bg = scene.add.rectangle(W/2, H/2, W, H, 0x000000, 0.95);
+            container.add(bg);
+            let title = scene.add.text(W/2, 40, 'ДОСТИЖЕНИЯ', { font: 'bold 50px Arial', fill: '#ffd700' }).setOrigin(0.5);
+            container.add(title);
+
+            let startX = 100;
+            let startY = 100;
+            let rowHeight = 50;
+
+            achievementsList.forEach((ach, index) => {
+                let color = ach.unlocked ? '#00ff00' : '#555555';
+                let status = ach.unlocked ? '✅' : '❌';
+                
+                let achTitle = scene.add.text(startX, startY + index * rowHeight, `${status} ${ach.title}`, { font: 'bold 22px Arial', fill: color });
+                let achDesc = scene.add.text(startX + 400, startY + index * rowHeight, ach.desc, { font: '18px Arial', fill: '#aaaaaa' });
+                
+                container.add(achTitle);
+                container.add(achDesc);
+            });
+
+            let closeBtn = scene.add.text(W/2, H - 50, 'ЗАКРЫТЬ', { font: 'bold 30px Arial', fill: '#000', backgroundColor: '#00ff00', padding: { x: 30, y: 10 } }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+            container.add(closeBtn);
+            closeBtn.on('pointerdown', () => { container.destroy(); });
+        }
+
+        function activateAdBoost(scene) {
+            multiplier = 5;
+            scene.cameras.main.flash(200, 255, 255, 0);
+            let boostText = scene.add.text(W/2, H/2 + 250, 'x5 ДОХОД!', { font: 'bold 60px Arial', fill: '#ffeb3b', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5);
+            scene.tweens.add({ targets: boostText, alpha: 0, duration: 3000, onComplete: () => { boostText.destroy(); multiplier = 1; updateUI(); } });
+        }
+
+        function updateUI() {
+            coinText.setText('BTC: ' + Math.floor(coins));
+            clickText.setText('За клик: ' + Math.floor(coinsPerClick * prestigeMultiplier) + (multiplier > 1 ? ' (x5!)' : ''));
+            autoText.setText('Ферма: ' + Math.floor(autoIncome * prestigeMultiplier * crashMultiplier) + ' / сек' + (multiplier > 1 ? ' (x5!)' : ''));
+            seasonText.setText('Сезон: ' + Math.floor(seasonScore) + ' очков');
+            
+            if (coins >= prestigeCost && !prestigeBtn.visible) {
+                prestigeText.setVisible(true);
+                prestigeBtn.setVisible(true);
+            }
+        }
+
+        function update(time, delta) {
+            for (let i = 0; i < bgCars.length; i++) {
+                let car = bgCars[i];
+                car.x += car.speed * car.direction * (delta / 1000);
+                
+                if (car.direction === 1 && car.x > W + 50) {
+                    car.x = -50;
+                    car.y = Phaser.Math.Between(100, H - 150);
+                } else if (car.direction === -1 && car.x < -50) {
+                    car.x = W + 50;
+                    car.y = Phaser.Math.Between(100, H - 150);
+                }
+            }
+        }
+
+        // --- ОТПРАВКА РЕЗУЛЬТАТА В ТОП (РАЗ В МИНУТУ) ---
+        setInterval(() => {
+            if (window.ysdk) {
+                window.ysdk.getLeaderboards().then(lb => {
+                    lb.setLeaderboardScore('crypto_score', Math.floor(coins)).catch(err => console.log('Leaderboard error', err));
+                });
+            }
+        }, 60000);
+
+        let startGame = () => {};
+
+        new Phaser.Game(config);
+        let ysdk;
+        YaGames.init().then(sdk => { window.ysdk = sdk; }).catch(err => console.log('SDK Error', err));
+    </script>
+</body>
+</html>
